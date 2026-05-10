@@ -32,21 +32,30 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-gradle-
 
-    - name: Fix gradlew line endings
+    - name: Setup Gradle Wrapper
       run: |
-        # Convert to Unix line endings if needed
+        # Fix gradlew line endings and permissions
         if command -v dos2unix &> /dev/null; then
           dos2unix gradlew 2>/dev/null || true
         fi
-        # Ensure shebang is correct
         sed -i '1s|^#!/bin/sh$|#!/bin/sh|' gradlew
-        sed -i '1s|^#!/bin/bash$|#!/bin/bash|' gradlew 2>/dev/null || true
-        # Set execute permission
         chmod +x gradlew
 
+        # Download gradle wrapper jar if not present
+        mkdir -p gradle/wrapper
+        if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
+          echo "Downloading Gradle wrapper JAR..."
+          curl -L -o gradle/wrapper/gradle-wrapper.jar \
+            "https://github.com/gradle/gradle/raw/v8.2.0/gradle/wrapper/gradle-wrapper.jar" \
+            || wget -O gradle/wrapper/gradle-wrapper.jar \
+            "https://github.com/gradle/gradle/raw/v8.2.0/gradle/wrapper/gradle-wrapper.jar"
+        fi
+        ls -la gradle/wrapper/
+
     - name: Build with Gradle
+      env:
+        JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.18-8/x64
       run: |
-        export JAVA_HOME=$JAVA_HOME_17_X64
         ./gradlew assembleDebug --no-daemon --stacktrace
 
     - name: Upload build outputs
@@ -82,7 +91,7 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-gradle-
 
-    - name: Fix gradlew line endings
+    - name: Setup Gradle Wrapper
       run: |
         if command -v dos2unix &> /dev/null; then
           dos2unix gradlew 2>/dev/null || true
@@ -90,7 +99,16 @@ jobs:
         sed -i '1s|^#!/bin/sh$|#!/bin/sh|' gradlew
         chmod +x gradlew
 
+        mkdir -p gradle/wrapper
+        if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
+          curl -L -o gradle/wrapper/gradle-wrapper.jar \
+            "https://github.com/gradle/gradle/raw/v8.2.0/gradle/wrapper/gradle-wrapper.jar" \
+            || wget -O gradle/wrapper/gradle-wrapper.jar \
+            "https://github.com/gradle/gradle/raw/v8.2.0/gradle/wrapper/gradle-wrapper.jar"
+        fi
+
     - name: Run lint
+      env:
+        JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.18-8/x64
       run: |
-        export JAVA_HOME=$JAVA_HOME_17_X64
         ./gradlew lint --no-daemon
