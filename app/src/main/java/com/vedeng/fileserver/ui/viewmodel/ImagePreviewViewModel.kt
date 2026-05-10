@@ -9,7 +9,6 @@ import com.vedeng.fileserver.proxy.CacheManager
 import com.vedeng.fileserver.proxy.ProxyServer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
@@ -75,7 +74,7 @@ class ImagePreviewViewModel(application: Application) : AndroidViewModel(applica
                     FileInputStream(cachedFile)
                 )
                 currentSessionId = sessionId
-                val url = "http://127.0.0.1:${proxyServer.getLocalPortValue()}/stream/$sessionId/${cachedFile.name}"
+                val url = "http://127.0.0.1:${ProxyServer.getLocalPortValue()}/stream/$sessionId/${cachedFile.name}"
                 _localUrl.postValue(url)
                 url
             } else {

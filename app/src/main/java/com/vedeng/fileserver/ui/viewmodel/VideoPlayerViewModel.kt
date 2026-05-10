@@ -10,7 +10,7 @@ import com.vedeng.fileserver.proxy.CacheManager
 import com.vedeng.fileserver.proxy.ProxyServer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
 
@@ -67,7 +67,7 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
                     FileInputStream(cachedFile)
                 )
                 currentSessionId = sessionId
-                val url = "http://127.0.0.1:${proxyServer.getLocalPortValue()}/video/$sessionId"
+                val url = "http://127.0.0.1:${ProxyServer.getLocalPortValue()}/video/$sessionId"
                 _localUrl.postValue(url)
                 url
             } else {
@@ -106,8 +106,12 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun getProxyUrl(remotePath: String): String {
-        val port = proxyServer.getLocalPortValue()
+        val port = ProxyServer.getLocalPortValue()
         return "http://127.0.0.1:$port/video/${remotePath.hashCode()}"
+    }
+
+    fun clearError() {
+        _error.value = null
     }
 
     fun startCast(videoUrl: String, title: String = "Video") {

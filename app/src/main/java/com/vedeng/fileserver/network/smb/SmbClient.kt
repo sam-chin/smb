@@ -68,7 +68,7 @@ class SmbClient(private val context: Context) {
                     name = file.name,
                     path = file.canonicalPath,
                     isDirectory = file.isDirectory,
-                    size = if (file.isDirectory) 0L else file.contentLength,
+                    size = if (file.isDirectory) 0L else file.length(),
                     lastModified = file.lastModified
                 )
             }
@@ -100,7 +100,7 @@ class SmbClient(private val context: Context) {
                 name = smbFile.name,
                 path = smbFile.canonicalPath,
                 isDirectory = smbFile.isDirectory,
-                size = if (smbFile.isDirectory) 0L else smbFile.contentLength,
+                size = if (smbFile.isDirectory) 0L else smbFile.length(),
                 lastModified = smbFile.lastModified
             )
             Result.success(fileItem)

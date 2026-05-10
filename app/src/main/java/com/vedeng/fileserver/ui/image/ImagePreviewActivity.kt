@@ -1,18 +1,16 @@
 package com.vedeng.fileserver.ui.image
 
 import android.os.Bundle
-import android.view.GestureDetector
-import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
-import android.view.WindowManager
+import android.view.GestureDetector
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.GestureDetectorCompat
-import com.vedeng.fileserver.R
 import com.vedeng.fileserver.databinding.ActivityImagePreviewBinding
 import com.vedeng.fileserver.ui.viewmodel.ImagePreviewViewModel
+import android.content.Intent
+import android.view.MotionEvent
 import kotlin.math.max
 import kotlin.math.min
 
@@ -21,90 +19,72 @@ class ImagePreviewActivity : AppCompatActivity() {
     private lateinit var binding: ActivityImagePreviewBinding
     private val viewModel: ImagePreviewViewModel by viewModels()
 
-    private lateinit var scaleGestureDetector: ScaleGestureDetector
-    private lateinit var gestureDetector: GestureDetectorCompat
-    private var currentScale = 1.0f
+    private var scaleFactor = 1.0f
     private var translateX = 0f
     private var translateY = 0f
+
+    private lateinit var scaleGestureDetector: ScaleGestureDetector
+    private lateinit var gestureDetector: GestureDetector
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityImagePreviewBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
-
-        setupToolbar()
         setupGestureDetectors()
         setupObservers()
         setupListeners()
 
-        loadImages()
-    }
+        val imagePath = intent.getStringExtra("image_path")
+        val imageList = intent.getStringArrayListExtra("image_list") ?: arrayListOf()
 
-    private fun setupToolbar() {
-        setSupportActionBar(binding.toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        supportActionBar?.title = intent.getStringExtra("name") ?: getString(R.string.image_preview)
+        if (imagePath != null) {
+            viewModel.setImageFiles(imageList)
+            val index = imageList.indexOf(imagePath)
+            if (index >= 0) {
+                viewModel.setCurrentIndex(index)
+            }
+        }
     }
 
     private fun setupGestureDetectors() {
         scaleGestureDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
             override fun onScale(detector: ScaleGestureDetector): Boolean {
-                val scaleFactor = detector.scaleFactor
-                currentScale *= scaleFactor
-                currentScale = max(0.5f, min(currentScale, 5.0f))
-                binding.imageView.scaleX = currentScale
-                binding.imageView.scaleY = currentScale
+                scaleFactor *= detector.scaleFactor
+                scaleFactor = max(0.5f, min(scaleFactor, 5.0f))
+                binding.imageView.scaleX = scaleFactor
+                binding.imageView.scaleY = scaleFactor
                 return true
             }
         })
 
-        gestureDetector = GestureDetectorCompat(this, object : GestureDetector.SimpleOnGestureListener() {
+        gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onDoubleTap(e: MotionEvent): Boolean {
-                if (currentScale > 1.0f) {
-                    currentScale = 1.0f
-                    translateX = 0f
-                    translateY = 0f
-                    binding.imageView.scaleX = currentScale
-                    binding.imageView.scaleY = currentScale
-                    binding.imageView.translationX = translateX
-                    binding.imageView.translationY = translateY
-                } else {
-                    currentScale = 2.5f
-                    binding.imageView.scaleX = currentScale
-                    binding.imageView.scaleY = currentScale
-                }
+                scaleFactor = if (scaleFactor > 1.0f) 1.0f else 2.0f
+                binding.imageView.scaleX = scaleFactor
+                binding.imageView.scaleY = scaleFactor
                 return true
             }
 
-            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                toggleControls()
-                return true
-            }
-
-            override fun onScroll(
-                e1: MotionEvent?,
-                e2: MotionEvent,
-                distanceX: Float,
-                distanceY: Float
-            ): Boolean {
-                if (currentScale > 1.0f) {
-                    translateX -= distanceX
-                    translateY -= distanceY
-                    binding.imageView.translationX = translateX
-                    binding.imageView.translationY = translateY
+            override fun onFling(e1: MotionEvent?, e2: MotionEvent, velocityX: Float, velocityY: Float): Boolean {
+                if (e1 == null) return false
+                val diffX = e2.x - e1.x
+                if (kotlin.math.abs(diffX) > 100) {
+                    if (diffX > 0) {
+                        viewModel.previousImage()
+                    } else {
+                        viewModel.nextImage()
+                    }
+                    return true
                 }
-                return true
+                return false
             }
         })
     }
 
     private fun setupObservers() {
-        viewModel.currentBitmap.observe(this) { bitmap ->
-            binding.imageView.setImageBitmap(bitmap)
-            resetTransform()
-            binding.loadingView.visibility = View.GONE
+        viewModel.currentImagePath.observe(this) { path ->
+            loadImage(path)
         }
 
         viewModel.isLoading.observe(this) { isLoading ->
@@ -122,14 +102,8 @@ class ImagePreviewActivity : AppCompatActivity() {
             updateIndexDisplay(index)
         }
 
-        viewModel.isSlideshowRunning.observe(this) { isRunning ->
-            binding.btnSlideshow.text = if (isRunning) getString(R.string.pause) else getString(R.string.slideshow)
-        }
-
-        viewModel.imageInfo.observe(this) { info ->
-            info?.let {
-                supportActionBar?.subtitle = "${it.resolution} | ${it.size}"
-            }
+        viewModel.slideshowEnabled.observe(this) { enabled ->
+            binding.btnSlideshow.text = if (enabled) "Pause" else "Slideshow"
         }
     }
 
@@ -151,58 +125,58 @@ class ImagePreviewActivity : AppCompatActivity() {
         binding.btnSlideshow.setOnClickListener {
             viewModel.toggleSlideshow()
         }
-    }
 
-    private fun loadImages() {
-        val path = intent.getStringExtra("path") ?: return
-        val name = intent.getStringExtra("name") ?: ""
-        val imageList = intent.getStringArrayListExtra("imageList") ?: arrayListOf(path)
-        val index = intent.getIntExtra("index", 0)
-
-        val items = imageList.mapIndexed { i, imagePath ->
-            ImagePreviewViewModel.ImageItem(
-                name = if (i == index) name else imagePath.substringAfterLast('/'),
-                path = imagePath,
-                sourceType = ImagePreviewViewModel.SourceType.LOCAL
-            )
+        binding.btnCast.setOnClickListener {
+            viewModel.currentImagePath.value?.let { path ->
+                val intent = Intent(this, com.vedeng.fileserver.ui.cast.CastDeviceActivity::class.java).apply {
+                    putExtra("media_url", path)
+                    putExtra("media_type", "image")
+                }
+                startActivity(intent)
+            }
         }
-
-        viewModel.setImageList(items, index)
     }
 
-    private fun toggleControls() {
-        val isVisible = binding.toolbar.visibility == View.VISIBLE
-        binding.toolbar.visibility = if (isVisible) View.GONE else View.VISIBLE
-        binding.bottomControls.visibility = if (isVisible) View.GONE else View.VISIBLE
+    private fun loadImage(path: String) {
+        binding.loadingView.visibility = View.VISIBLE
+        val cachedUrl = viewModel.getCachedImageUrl(path)
+        if (cachedUrl != null) {
+            binding.imageView.setImageURI(android.net.Uri.parse(cachedUrl))
+            binding.loadingView.visibility = View.GONE
+        } else {
+            viewModel.cacheImageForLocalPreview(
+                sourceStreamProvider = {
+                    viewModel.currentImagePath.value?.let { p ->
+                        java.io.File(p).inputStream()
+                    } ?: throw Exception("No image path")
+                },
+                remotePath = path
+            )
+            viewModel.localUrl.observe(this) { url ->
+                url?.let {
+                    binding.imageView.setImageURI(android.net.Uri.parse(it))
+                    binding.loadingView.visibility = View.GONE
+                }
+            }
+        }
     }
 
     private fun resetTransform() {
-        currentScale = 1.0f
+        scaleFactor = 1.0f
         translateX = 0f
         translateY = 0f
-        binding.imageView.scaleX = currentScale
-        binding.imageView.scaleY = currentScale
-        binding.imageView.translationX = translateX
-        binding.imageView.translationY = translateY
+        binding.imageView.scaleX = 1.0f
+        binding.imageView.scaleY = 1.0f
+        binding.imageView.translationX = 0f
+        binding.imageView.translationY = 0f
     }
 
     private fun updateIndexDisplay(index: Int) {
-        val total = viewModel.getImageCount()
-        binding.tvIndex.text = "${index + 1} / $total"
-    }
-
-    override fun onOptionsItemSelected(item: android.view.MenuItem): Boolean {
-        return when (item.itemId) {
-            android.R.id.home -> {
-                finish()
-                true
-            }
-            else -> super.onOptionsItemSelected(item)
-        }
+        supportActionBar?.title = "${index + 1} / ${viewModel.imageFiles.value?.size ?: 0}"
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        viewModel.stopSlideshow()
+        viewModel.releaseStream()
     }
 }

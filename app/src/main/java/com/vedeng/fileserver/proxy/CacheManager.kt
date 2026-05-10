@@ -10,7 +10,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
-class CacheManager(private val context: Context) {
+class CacheManager private constructor(private val context: Context) {
 
     private val TAG = "CacheManager"
     private val cacheDir: File
@@ -27,6 +27,17 @@ class CacheManager(private val context: Context) {
 
     private val cleanupJob = SupervisorJob()
     private val cleanupScope = CoroutineScope(Dispatchers.IO + cleanupJob)
+
+    companion object {
+        @Volatile
+        private var instance: CacheManager? = null
+
+        fun getInstance(context: Context): CacheManager {
+            return instance ?: synchronized(this) {
+                instance ?: CacheManager(context.applicationContext).also { instance = it }
+            }
+        }
+    }
 
     data class ActiveFileHandle(
         val key: String,
