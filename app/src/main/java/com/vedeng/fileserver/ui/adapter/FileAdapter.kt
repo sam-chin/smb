@@ -7,16 +7,16 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.vedeng.fileserver.R
-import com.vedeng.fileserver.data.model.FileItem
 import com.vedeng.fileserver.databinding.ItemFileBinding
+import com.vedeng.fileserver.ui.viewmodel.FileManagerViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 class FileAdapter(
-    private val onItemClick: (FileItem) -> Unit,
-    private val onItemLongClick: (FileItem) -> Unit = {}
-) : ListAdapter<FileItem, FileAdapter.FileViewHolder>(FileDiffCallback()) {
+    private val onItemClick: (FileManagerViewModel.FileItem) -> Unit,
+    private val onItemLongClick: (FileManagerViewModel.FileItem) -> Unit = {}
+) : ListAdapter<FileManagerViewModel.FileItem, FileAdapter.FileViewHolder>(FileDiffCallback()) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): FileViewHolder {
         val binding = ItemFileBinding.inflate(
@@ -52,7 +52,7 @@ class FileAdapter(
             }
         }
 
-        fun bind(item: FileItem) {
+        fun bind(item: FileManagerViewModel.FileItem) {
             binding.tvFileName.text = item.name
 
             if (item.isDirectory) {
@@ -96,12 +96,12 @@ class FileAdapter(
         }
     }
 
-    class FileDiffCallback : DiffUtil.ItemCallback<FileItem>() {
-        override fun areItemsTheSame(oldItem: FileItem, newItem: FileItem): Boolean {
+    class FileDiffCallback : DiffUtil.ItemCallback<FileManagerViewModel.FileItem>() {
+        override fun areItemsTheSame(oldItem: FileManagerViewModel.FileItem, newItem: FileManagerViewModel.FileItem): Boolean {
             return oldItem.path == newItem.path
         }
 
-        override fun areContentsTheSame(oldItem: FileItem, newItem: FileItem): Boolean {
+        override fun areContentsTheSame(oldItem: FileManagerViewModel.FileItem, newItem: FileManagerViewModel.FileItem): Boolean {
             return oldItem == newItem
         }
     }

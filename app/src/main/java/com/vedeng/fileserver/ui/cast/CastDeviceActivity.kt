@@ -7,7 +7,6 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.vedeng.fileserver.databinding.ActivityCastDeviceBinding
-import com.vedeng.fileserver.network.dlna.CastController
 import com.vedeng.fileserver.ui.viewmodel.CastDeviceViewModel
 
 class CastDeviceActivity : AppCompatActivity() {
@@ -31,7 +30,7 @@ class CastDeviceActivity : AppCompatActivity() {
     private fun setupRecyclerView() {
         deviceAdapter = CastDeviceAdapter { device ->
             viewModel.selectDevice(device)
-            binding.btnCast.isEnabled = true
+            binding.btnPlay.isEnabled = true
         }
 
         binding.recyclerView.apply {
@@ -59,29 +58,38 @@ class CastDeviceActivity : AppCompatActivity() {
 
         viewModel.selectedDevice.observe(this) { device ->
             device?.let {
-                binding.btnCast.text = "Cast to ${it.name}"
+                binding.btnPlay.isEnabled = true
             }
         }
     }
 
     private fun setupListeners() {
-        binding.btnCast.setOnClickListener {
+        binding.btnPlay.setOnClickListener {
             val mediaUrl = intent.getStringExtra("media_url") ?: return@setOnClickListener
             val mediaType = intent.getStringExtra("media_type") ?: "video"
             val title = mediaUrl.substringAfterLast('/')
 
             viewModel.startCasting(mediaUrl, if (mediaType == "video") "video/mp4" else "image/*", title)
             Toast.makeText(this, "Casting started", Toast.LENGTH_SHORT).show()
-            finish()
+            binding.btnStop.isEnabled = true
         }
 
-        binding.btnSearch.setOnClickListener {
-            viewModel.searchDevices()
+        binding.btnPause.setOnClickListener {
+            viewModel.pauseCast()
         }
 
         binding.btnStop.setOnClickListener {
             viewModel.stopCasting()
             Toast.makeText(this, "Casting stopped", Toast.LENGTH_SHORT).show()
+            binding.btnStop.isEnabled = false
+        }
+
+        binding.btnRefresh.setOnClickListener {
+            viewModel.searchDevices()
+        }
+
+        binding.fabRefresh.setOnClickListener {
+            viewModel.searchDevices()
         }
     }
 

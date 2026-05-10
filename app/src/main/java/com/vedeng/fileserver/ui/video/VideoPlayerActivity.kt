@@ -9,7 +9,6 @@ import com.vedeng.fileserver.databinding.ActivityVideoPlayerBinding
 import com.vedeng.fileserver.ui.viewmodel.VideoPlayerViewModel
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.PlayerView
 import android.content.Intent
 
 class VideoPlayerActivity : AppCompatActivity() {
