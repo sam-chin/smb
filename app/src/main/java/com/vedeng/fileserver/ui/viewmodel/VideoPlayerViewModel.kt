@@ -5,24 +5,26 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
-import com.vedeng.fileserver.FileServerApp
-import com.vedeng.fileserver.data.model.ServerConfig
 import com.vedeng.fileserver.network.dlna.CastController
-import com.vedeng.fileserver.network.ftp.FtpClient
-import com.vedeng.fileserver.network.smb.SmbClient
+import com.vedeng.fileserver.proxy.CacheManager
 import com.vedeng.fileserver.proxy.ProxyServer
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
+import java.io.FileInputStream
+import java.io.InputStream
 
 class VideoPlayerViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val _videoUrl = MutableLiveData<String?>()
-    val videoUrl: LiveData<String?> = _videoUrl
+    private val cacheManager = CacheManager.getInstance(application)
+    private val proxyServer = ProxyServer.getInstance(application, cacheManager)
+    val castController = CastController()
+
+    private val _videoPath = MutableLiveData<String>()
+    val videoPath: LiveData<String> = _videoPath
+
+    private val _localUrl = MutableLiveData<String>()
+    val localUrl: LiveData<String> = _localUrl
 
     private val _isLoading = MutableLiveData<Boolean>()
     val isLoading: LiveData<Boolean> = _isLoading
@@ -30,402 +32,166 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
     private val _error = MutableLiveData<String?>()
     val error: LiveData<String?> = _error
 
+    private val _isCasting = MutableLiveData<Boolean>()
+    val isCasting: LiveData<Boolean> = _isCasting
+
+    private val _castDevice = MutableLiveData<CastController.CastDevice?>()
+    val castDevice: LiveData<CastController.CastDevice?> = _castDevice
+
     private val _playbackPosition = MutableLiveData<Long>()
     val playbackPosition: LiveData<Long> = _playbackPosition
 
-    private val _duration = MutableLiveData<Long>()
-    val duration: LiveData<Long> = _duration
+    private val _videoDuration = MutableLiveData<Long>()
+    val videoDuration: LiveData<Long> = _videoDuration
 
-    private val _isPlaying = MutableLiveData<Boolean>()
-    val isPlaying: LiveData<Boolean> = _isPlaying
+    private var currentSessionId: String? = null
 
-    private val _castStatus = MutableLiveData<CastStatus>()
-    val castStatus: LiveData<CastStatus> = _castStatus
-
-    private val _castDevices = MutableLiveData<List<CastController.CastDevice>>()
-    val castDevices: LiveData<List<CastController.CastDevice>> = _castDevices
-
-    private val _selectedDevice = MutableLiveData<CastController.CastDevice?>()
-    val selectedDevice: LiveData<CastController.CastDevice?> = _selectedDevice
-
-    private val _castPosition = MutableLiveData<Pair<Long, Long>>()
-    val castPosition: LiveData<Pair<Long, Long>> = _castPosition
-
-    private var castController: CastController? = null
-    private var cacheManager = FileServerApp.instance.cacheManager
-    private var proxyServer = FileServerApp.instance.proxyServer
-    private var positionUpdateJob: Job? = null
-    private var castPositionJob: Job? = null
-
-    private var currentVideoPath: String = ""
-    private var currentServerConfig: ServerConfig? = null
-    private var localProxyUrl: String = ""
-    private var castProxyUrl: String = ""
-
-    enum class CastStatus {
-        IDLE, SEARCHING, CONNECTING, CASTING, ERROR
+    fun setVideoPath(path: String) {
+        _videoPath.value = path
     }
 
-    data class VideoInfo(
-        val name: String,
-        val path: String,
-        val size: Long,
-        val duration: Long = 0
-    )
-
-    private val _videoInfo = MutableLiveData<VideoInfo?>()
-    val videoInfo: LiveData<VideoInfo?> = _videoInfo
-
-    init {
-        _castStatus.value = CastStatus.IDLE
-    }
-
-    fun prepareVideo(
-        name: String,
-        path: String,
-        serverConfig: ServerConfig?
-    ) {
-        currentVideoPath = path
-        currentServerConfig = serverConfig
-        _videoInfo.value = VideoInfo(name = name, path = path, size = 0)
-
-        viewModelScope.launch {
-            _isLoading.value = true
-
-            try {
-                val cachedFile = cacheManager.getCachedFile(path)
-
-                if (cachedFile != null && cachedFile.exists()) {
-                    localProxyUrl = ProxyServer.getLocalUrl("/file/${cachedFile.name}")
-                    _videoUrl.value = localProxyUrl
-                    _videoInfo.value = VideoInfo(
-                        name = name,
-                        path = cachedFile.absolutePath,
-                        size = cachedFile.length()
-                    )
-                    _isLoading.value = false
-                    return@launch
-                }
-
-                when (serverConfig?.type) {
-                    com.vedeng.fileserver.data.model.ServerType.LOCAL -> {
-                        val file = File(path)
-                        if (file.exists()) {
-                            val result = cacheManager.cacheFile(path) { file.inputStream() }
-                            if (result.isSuccess) {
-                                localProxyUrl = ProxyServer.getLocalUrl("/file/${cacheManager.getCacheKey(path)}")
-                                _videoUrl.value = localProxyUrl
-                                _videoInfo.value = VideoInfo(
-                                    name = name,
-                                    path = result.getOrNull()?.absolutePath ?: path,
-                                    size = result.getOrNull()?.length() ?: 0
-                                )
-                            }
-                        }
-                    }
-                    com.vedeng.fileserver.data.model.ServerType.SMB -> {
-                        prepareSmbVideo(name, path, serverConfig)
-                    }
-                    com.vedeng.fileserver.data.model.ServerType.FTP -> {
-                        prepareFtpVideo(name, path, serverConfig)
-                    }
-                    else -> {
-                        _error.value = "Unsupported source"
-                    }
-                }
-            } catch (e: Exception) {
-                _error.value = e.message
-            } finally {
-                _isLoading.value = false
-            }
-        }
-    }
-
-    private suspend fun prepareSmbVideo(name: String, path: String, config: ServerConfig) {
-        withContext(Dispatchers.IO) {
-            try {
-                val smbClient = SmbClient(getApplication())
-                val result = if (config.anonymous) {
-                    smbClient.connectAnonymous(config.host, config.share ?: "")
-                } else {
-                    smbClient.connect(config.host, config.share ?: "", config.username, config.password)
-                }
-
-                if (result.isFailure) {
-                    withContext(Dispatchers.Main) {
-                        _error.value = result.exceptionOrNull()?.message ?: "Connection failed"
-                    }
-                    return@withContext
-                }
-
-                val streamResult = smbClient.openInputStream(path)
-                if (streamResult.isFailure) {
-                    withContext(Dispatchers.Main) {
-                        _error.value = streamResult.exceptionOrNull()?.message ?: "Failed to open stream"
-                    }
-                    return@withContext
-                }
-
-                val sizeResult = smbClient.getFileSize(path)
-                val size = sizeResult.getOrNull() ?: 0L
-
-                val cacheResult = cacheManager.cacheFile(path) {
-                    val inputStream = smbClient.openInputStream(path).getOrNull()
-                        ?: throw Exception("Failed to open SMB stream")
-                    inputStream
-                }
-
-                if (cacheResult.isSuccess) {
-                    val cachedFile = cacheResult.getOrNull()!!
-                    withContext(Dispatchers.Main) {
-                        localProxyUrl = ProxyServer.getLocalUrl("/file/${cacheManager.getCacheKey(path)}")
-                        _videoUrl.value = localProxyUrl
-                        _videoInfo.value = VideoInfo(
-                            name = name,
-                            path = cachedFile.absolutePath,
-                            size = cachedFile.length()
-                        )
-                    }
-                } else {
-                    withContext(Dispatchers.Main) {
-                        _error.value = cacheResult.exceptionOrNull()?.message ?: "Cache failed"
-                    }
-                }
-
-                smbClient.disconnect()
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    _error.value = e.message
-                }
-            }
-        }
-    }
-
-    private suspend fun prepareFtpVideo(name: String, path: String, config: ServerConfig) {
-        withContext(Dispatchers.IO) {
-            try {
-                val ftpClient = FtpClient(
-                    config.host,
-                    config.port,
-                    config.username ?: "anonymous",
-                    config.password ?: ""
+    fun cacheVideoForLocalPlayback(
+        sourceStreamProvider: () -> InputStream,
+        remotePath: String
+    ): String? {
+        _isLoading.postValue(true)
+        return try {
+            val cachedFile = cacheManager.cacheFile(sourceStreamProvider, remotePath)
+            if (cachedFile != null) {
+                val sessionId = proxyServer.registerStream(
+                    ProxyServer.StreamRequest(
+                        sourceType = ProxyServer.SourceType.LOCAL,
+                        remotePath = remotePath,
+                        host = "127.0.0.1"
+                    ),
+                    FileInputStream(cachedFile)
                 )
-
-                if (ftpClient.connect().isFailure) {
-                    withContext(Dispatchers.Main) {
-                        _error.value = "FTP connection failed"
-                    }
-                    return@withContext
-                }
-
-                val sizeResult = ftpClient.getFileSize(path)
-                val size = sizeResult.getOrNull() ?: 0L
-
-                val cacheResult = cacheManager.cacheFile(path) {
-                    val streamResult = ftpClient.downloadStream(path)
-                    streamResult.getOrNull() ?: throw Exception("Failed to download")
-                }
-
-                if (cacheResult.isSuccess) {
-                    val cachedFile = cacheResult.getOrNull()!!
-                    withContext(Dispatchers.Main) {
-                        localProxyUrl = ProxyServer.getLocalUrl("/file/${cacheManager.getCacheKey(path)}")
-                        _videoUrl.value = localProxyUrl
-                        _videoInfo.value = VideoInfo(
-                            name = name,
-                            path = cachedFile.absolutePath,
-                            size = cachedFile.length()
-                        )
-                    }
-                } else {
-                    withContext(Dispatchers.Main) {
-                        _error.value = cacheResult.exceptionOrNull()?.message ?: "Cache failed"
-                    }
-                }
-
-                ftpClient.disconnect()
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    _error.value = e.message
-                }
+                currentSessionId = sessionId
+                val url = "http://127.0.0.1:${proxyServer.getLocalPortValue()}/video/$sessionId"
+                _localUrl.postValue(url)
+                url
+            } else {
+                null
             }
+        } catch (e: Exception) {
+            _error.postValue(e.message)
+            null
+        } finally {
+            _isLoading.postValue(false)
         }
     }
 
-    fun updatePlaybackState(isPlaying: Boolean, position: Long, duration: Long) {
-        _isPlaying.value = isPlaying
-        _playbackPosition.value = position
-        _duration.value = duration
+    fun cacheVideoForCast(
+        sourceStreamProvider: () -> InputStream,
+        remotePath: String
+    ): String? {
+        return try {
+            val cachedFile = cacheManager.cacheFile(sourceStreamProvider, remotePath)
+            if (cachedFile != null) {
+                "file://${cachedFile.absolutePath}"
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            _error.postValue(e.message)
+            null
+        }
     }
 
-    fun searchCastDevices() {
-        viewModelScope.launch {
-            _castStatus.value = CastStatus.SEARCHING
-            _castDevices.value = emptyList()
+    fun getCachedVideoUrl(remotePath: String): String? {
+        val cachedFile = cacheManager.getCachedFile(remotePath)
+        return if (cachedFile != null && cachedFile.exists()) {
+            "file://${cachedFile.absolutePath}"
+        } else null
+    }
 
+    fun getProxyUrl(remotePath: String): String {
+        val port = proxyServer.getLocalPortValue()
+        return "http://127.0.0.1:$port/video/${remotePath.hashCode()}"
+    }
+
+    fun startCast(videoUrl: String, title: String = "Video") {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
-                castController = CastController()
-                val result = castController!!.searchDevices(5000)
-
-                result.fold(
-                    onSuccess = { devices ->
-                        _castDevices.value = devices
-                        _castStatus.value = if (devices.isEmpty()) CastStatus.IDLE else CastStatus.IDLE
-                    },
-                    onFailure = { e ->
-                        _error.value = e.message
-                        _castStatus.value = CastStatus.ERROR
-                    }
-                )
-            } catch (e: Exception) {
-                _error.value = e.message
-                _castStatus.value = CastStatus.ERROR
-            }
-        }
-    }
-
-    fun selectDevice(device: CastController.CastDevice) {
-        viewModelScope.launch {
-            _selectedDevice.value = device
-            _castStatus.value = CastStatus.CONNECTING
-
-            try {
-                castController = CastController()
-                val connectResult = castController!!.connectDevice(device)
-
-                connectResult.fold(
-                    onSuccess = {
-                        _castStatus.value = CastStatus.IDLE
-                    },
-                    onFailure = { e ->
-                        _error.value = e.message
-                        _castStatus.value = CastStatus.ERROR
-                    }
-                )
-            } catch (e: Exception) {
-                _error.value = e.message
-                _castStatus.value = CastStatus.ERROR
-            }
-        }
-    }
-
-    fun startCasting() {
-        viewModelScope.launch {
-            val device = _selectedDevice.value ?: return@launch
-            val videoInfo = _videoInfo.value ?: return@launch
-
-            _castStatus.value = CastStatus.CONNECTING
-
-            try {
-                if (castController == null) {
-                    castController = CastController()
-                    castController!!.connectDevice(device)
+                val device = _castDevice.value
+                if (device != null) {
+                    castController.selectDevice(device)
+                    castController.play(videoUrl, "video/mp4", title)
+                    _isCasting.postValue(true)
                 }
-
-                val proxyUrl = if (castProxyUrl.isEmpty()) {
-                    localProxyUrl.ifEmpty {
-                        _videoUrl.value ?: throw Exception("No video URL available")
-                    }
-                } else {
-                    castProxyUrl
-                }
-
-                val result = castController!!.play(
-                    mediaUrl = proxyUrl,
-                    mediaTitle = videoInfo.name,
-                    mediaType = "video/*"
-                )
-
-                result.fold(
-                    onSuccess = {
-                        _castStatus.value = CastStatus.CASTING
-                        startCastPositionUpdates()
-                    },
-                    onFailure = { e ->
-                        _error.value = e.message
-                        _castStatus.value = CastStatus.ERROR
-                    }
-                )
             } catch (e: Exception) {
-                _error.value = e.message
-                _castStatus.value = CastStatus.ERROR
+                _error.postValue("Cast failed: ${e.message}")
             }
         }
     }
 
-    fun stopCasting() {
-        viewModelScope.launch {
+    fun stopCast() {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
-                castController?.stop()
-                castPositionJob?.cancel()
-                _castStatus.value = CastStatus.IDLE
-                _selectedDevice.value = null
-                _castPosition.value = Pair(0L, 0L)
+                castController.stop()
+                _isCasting.postValue(false)
             } catch (e: Exception) {
-                _error.value = e.message
+                _error.postValue("Stop cast failed: ${e.message}")
             }
         }
     }
 
-    fun pauseCasting() {
-        viewModelScope.launch {
+    fun pauseCast() {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
-                castController?.pause()
+                castController.pause()
             } catch (e: Exception) {
-                _error.value = e.message
+                _error.postValue("Pause cast failed: ${e.message}")
             }
         }
     }
 
-    fun resumeCasting() {
-        viewModelScope.launch {
+    fun resumeCast() {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
-                castController?.resume()
+                castController.resume()
             } catch (e: Exception) {
-                _error.value = e.message
+                _error.postValue("Resume cast failed: ${e.message}")
             }
         }
     }
 
-    fun seekCasting(positionMs: Long) {
-        viewModelScope.launch {
+    fun seekCast(position: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
-                castController?.seek(positionMs)
+                castController.seek(position)
             } catch (e: Exception) {
-                _error.value = e.message
+                _error.postValue("Seek failed: ${e.message}")
             }
         }
     }
 
-    private fun startCastPositionUpdates() {
-        castPositionJob?.cancel()
-        castPositionJob = viewModelScope.launch {
-            while (isActive && _castStatus.value == CastStatus.CASTING) {
-                try {
-                    val result = castController?.getPositionInfo()
-                    if (result?.isSuccess == true) {
-                        _castPosition.value = result.getOrNull()
-                    }
-                } catch (e: Exception) {
-                }
-                delay(1000)
-            }
+    fun selectCastDevice(device: CastController.CastDevice) {
+        _castDevice.postValue(device)
+    }
+
+    fun searchCastDevices(callback: (List<CastController.CastDevice>) -> Unit) {
+        castController.searchDevices(callback)
+    }
+
+    fun setPlaybackPosition(position: Long) {
+        _playbackPosition.postValue(position)
+    }
+
+    fun setVideoDuration(duration: Long) {
+        _videoDuration.postValue(duration)
+    }
+
+    fun releaseStream() {
+        currentSessionId?.let {
+            proxyServer.unregisterStream(it)
+            currentSessionId = null
         }
-    }
-
-    fun setCastProxyUrl(url: String) {
-        castProxyUrl = url
-    }
-
-    fun getLocalProxyUrl(): String = localProxyUrl
-
-    fun clearError() {
-        _error.value = null
     }
 
     override fun onCleared() {
         super.onCleared()
-        stopCasting()
-        castController?.disconnect()
+        releaseStream()
+        castController.disconnect()
     }
 }
