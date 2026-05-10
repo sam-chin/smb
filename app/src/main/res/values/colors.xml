@@ -14,4 +14,5 @@
     <color name="surface">#FFFFFFFF</color>
     <color name="on_surface">#FF212121</color>
     <color name="error">#FFB00020</color>
+    <color name="ic_launcher_background">#FF2196F3</color>
 </resources>
