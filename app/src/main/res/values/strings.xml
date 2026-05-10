@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">文件服务器</string>
+    <string name="file_manager">文件管理</string>
+    <string name="image_preview">图片预览</string>
+    <string name="video_player">视频播放</string>
+    <string name="dlna_cast">DLNA 投屏</string>
+    <string name="settings">设置</string>
+    <string name="local_preview">本地预览</string>
+    <string name="cast_to_device">投屏到设备</string>
+    <string name="stop_cast">停止投屏</string>
+    <string name="searching_devices">正在搜索设备...</string>
+    <string name="no_devices_found">未找到设备</string>
+    <string name="connect_failed">连接失败</string>
+    <string name="connection_success">连接成功</string>
+    <string name="loading">加载中...</string>
+    <string name="error">错误</string>
+    <string name="retry">重试</string>
+    <string name="cancel">取消</string>
+    <string name="confirm">确认</string>
+    <string name="add_server">添加服务器</string>
+    <string name="server_name">服务器名称</string>
+    <string name="server_address">服务器地址</string>
+    <string name="username">用户名</string>
+    <string name="password">密码</string>
+    <string name="anonymous">匿名登录</string>
+    <string name="remember_password">记住密码</string>
+    <string name="connect">连接</string>
+    <string name="disconnect">断开</string>
+    <string name="slideshow">幻灯片播放</string>
+    <string name="play">播放</string>
+    <string name="pause">暂停</string>
+    <string name="previous">上一张</string>
+    <string name="next">下一张</string>
+    <string name="casting">正在投屏</string>
+    <string name="not_casting">未投屏</string>
+</resources>
