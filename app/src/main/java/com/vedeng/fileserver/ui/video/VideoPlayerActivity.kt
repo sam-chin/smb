@@ -8,8 +8,8 @@ import androidx.appcompat.app.AppCompatActivity
 import com.vedeng.fileserver.databinding.ActivityVideoPlayerBinding
 import com.vedeng.fileserver.ui.viewmodel.VideoPlayerViewModel
 import androidx.media3.common.MediaItem
-import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import android.content.Intent
 
 class VideoPlayerActivity : AppCompatActivity() {
@@ -37,7 +37,7 @@ class VideoPlayerActivity : AppCompatActivity() {
 
     private fun setupObservers() {
         viewModel.isLoading.observe(this) { isLoading ->
-            binding.loadingView.visibility = if (isLoading) View.VISIBLE else View.GONE
+            binding.loadingProgress.visibility = if (isLoading) View.VISIBLE else View.GONE
         }
 
         viewModel.error.observe(this) { error ->
@@ -52,13 +52,7 @@ class VideoPlayerActivity : AppCompatActivity() {
         }
 
         viewModel.isCasting.observe(this) { isCasting ->
-            updateCastStatus(isCasting)
-        }
-
-        viewModel.castDevice.observe(this) { device ->
-            device?.let {
-                binding.btnCast.text = "Casting to ${it.name}"
-            }
+            binding.castStatusText.visibility = if (isCasting) View.VISIBLE else View.GONE
         }
     }
 
@@ -80,7 +74,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     }
 
     private fun prepareVideo(path: String) {
-        viewModel.isLoading.postValue(true)
+        viewModel.isLoading.value = true
 
         val cachedUrl = viewModel.getCachedVideoUrl(path)
         if (cachedUrl != null) {
@@ -113,30 +107,21 @@ class VideoPlayerActivity : AppCompatActivity() {
             exoPlayer.seekTo(playbackPosition)
             exoPlayer.prepare()
 
-            exoPlayer.addListener(object : Player.Listener {
+            exoPlayer.addListener(object : androidx.media3.common.Player.Listener {
                 override fun onPlaybackStateChanged(state: Int) {
                     when (state) {
-                        Player.STATE_READY -> {
-                            viewModel.isLoading.postValue(false)
+                        androidx.media3.common.Player.STATE_READY -> {
+                            viewModel.isLoading.value = false
                             viewModel.setVideoDuration(exoPlayer.duration)
                         }
-                        Player.STATE_ENDED -> {
+                        androidx.media3.common.Player.STATE_ENDED -> {
                             viewModel.setPlaybackPosition(0)
                         }
                     }
                 }
             })
         }
-        viewModel.isLoading.postValue(false)
-    }
-
-    private fun updateCastStatus(isCasting: Boolean) {
-        if (isCasting) {
-            binding.castStatusView.visibility = View.VISIBLE
-            binding.castStatusView.text = "Casting..."
-        } else {
-            binding.castStatusView.visibility = View.GONE
-        }
+        viewModel.isLoading.value = false
     }
 
     override fun onStart() {

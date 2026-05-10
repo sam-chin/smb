@@ -62,80 +62,80 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun connectToSmbServer(host: String, share: String, username: String?, password: String?) {
-        _connectionStatus.postValue(ConnectionStatus.CONNECTING)
+        _connectionStatus.value = ConnectionStatus.CONNECTING
         viewModelScope.launch {
             try {
                 smbClient = SmbClient(getApplication())
                 val result = smbClient?.connect(host, share, username, password)
                 if (result?.isSuccess == true) {
-                    _currentServer.postValue(ServerInfo(
+                    _currentServer.value = ServerInfo(
                         name = "$host/$share",
                         type = ServerType.SMB,
                         host = host,
                         port = 445,
                         username = username,
                         password = password
-                    ))
-                    _connectionStatus.postValue(ConnectionStatus.CONNECTED)
+                    )
+                    _connectionStatus.value = ConnectionStatus.CONNECTED
                     listFiles("/")
                 } else {
-                    _connectionStatus.postValue(ConnectionStatus.ERROR)
-                    _error.postValue(result?.exceptionOrNull()?.message ?: "Connection failed")
+                    _connectionStatus.value = ConnectionStatus.ERROR
+                    _error.value = result?.exceptionOrNull()?.message ?: "Connection failed"
                 }
             } catch (e: Exception) {
-                _connectionStatus.postValue(ConnectionStatus.ERROR)
-                _error.postValue(e.message)
+                _connectionStatus.value = ConnectionStatus.ERROR
+                _error.value = e.message
             }
         }
     }
 
     fun connectToFtpServer(host: String, port: Int, username: String?, password: String?) {
-        _connectionStatus.postValue(ConnectionStatus.CONNECTING)
+        _connectionStatus.value = ConnectionStatus.CONNECTING
         viewModelScope.launch {
             try {
                 ftpClient = FtpClient()
                 val result = ftpClient?.connect(host, port, username, password)
                 if (result?.isSuccess == true) {
-                    _currentServer.postValue(ServerInfo(
+                    _currentServer.value = ServerInfo(
                         name = "$host:$port",
                         type = ServerType.FTP,
                         host = host,
                         port = port,
                         username = username,
                         password = password
-                    ))
-                    _connectionStatus.postValue(ConnectionStatus.CONNECTED)
+                    )
+                    _connectionStatus.value = ConnectionStatus.CONNECTED
                     listFiles("/")
                 } else {
-                    _connectionStatus.postValue(ConnectionStatus.ERROR)
-                    _error.postValue(result?.exceptionOrNull()?.message ?: "Connection failed")
+                    _connectionStatus.value = ConnectionStatus.ERROR
+                    _error.value = result?.exceptionOrNull()?.message ?: "Connection failed"
                 }
             } catch (e: Exception) {
-                _connectionStatus.postValue(ConnectionStatus.ERROR)
-                _error.postValue(e.message)
+                _connectionStatus.value = ConnectionStatus.ERROR
+                _error.value = e.message
             }
         }
     }
 
     fun connectToLocalStorage() {
-        _connectionStatus.postValue(ConnectionStatus.CONNECTED)
-        _currentServer.postValue(ServerInfo(
+        _connectionStatus.value = ConnectionStatus.CONNECTED
+        _currentServer.value = ServerInfo(
             name = "Local Storage",
             type = ServerType.LOCAL
-        ))
+        )
         listLocalFiles("/")
     }
 
     fun listFiles(path: String) {
-        _isLoading.postValue(true)
-        _currentPath.postValue(path)
+        _isLoading.value = true
+        _currentPath.value = path
 
         viewModelScope.launch {
             when (_currentServer.value?.type) {
                 ServerType.SMB -> listSmbFiles(path)
                 ServerType.FTP -> listFtpFiles(path)
                 ServerType.LOCAL -> listLocalFiles(path)
-                null -> _isLoading.postValue(false)
+                null -> _isLoading.value = false
             }
         }
     }
@@ -144,7 +144,7 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
         try {
             val serverInfo = _currentServer.value
             if (serverInfo == null) {
-                _isLoading.postValue(false)
+                _isLoading.value = false
                 return@withContext
             }
             val smbPath = SmbClient.buildPath(serverInfo.host, "", path.removePrefix("/"))
@@ -240,6 +240,10 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
         _connectionStatus.postValue(ConnectionStatus.DISCONNECTED)
         _files.postValue(emptyList())
         _currentPath.postValue("/")
+    }
+
+    fun clearError() {
+        _error.value = null
     }
 
     fun getInputStream(path: String, callback: (java.io.InputStream?) -> Unit) {

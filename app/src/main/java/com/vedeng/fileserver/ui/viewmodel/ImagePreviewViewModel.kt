@@ -10,7 +10,6 @@ import com.vedeng.fileserver.proxy.ProxyServer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
-import java.io.FileInputStream
 import java.io.InputStream
 
 class ImagePreviewViewModel(application: Application) : AndroidViewModel(application) {
@@ -57,41 +56,27 @@ class ImagePreviewViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
-    fun cacheImageForLocalPreview(
-        sourceStreamProvider: () -> InputStream,
-        remotePath: String
-    ): String? {
-        _isLoading.postValue(true)
+    fun cacheImageForLocalPreview(sourceStreamProvider: () -> InputStream, remotePath: String): String? {
+        _isLoading.value = true
         return try {
             val cachedFile = cacheManager.cacheFile(sourceStreamProvider, remotePath)
             if (cachedFile != null) {
-                val sessionId = proxyServer.registerStream(
-                    ProxyServer.StreamRequest(
-                        sourceType = ProxyServer.SourceType.LOCAL,
-                        remotePath = remotePath,
-                        host = "127.0.0.1"
-                    ),
-                    FileInputStream(cachedFile)
-                )
-                currentSessionId = sessionId
-                val url = "http://127.0.0.1:${ProxyServer.getLocalPortValue()}/stream/$sessionId/${cachedFile.name}"
-                _localUrl.postValue(url)
+                currentSessionId = "local_${System.currentTimeMillis()}"
+                val url = "http://127.0.0.1:${ProxyServer.getLocalPortValue()}/image/${cachedFile.name}"
+                _localUrl.value = url
                 url
             } else {
                 null
             }
         } catch (e: Exception) {
-            _error.postValue(e.message)
+            _error.value = e.message
             null
         } finally {
-            _isLoading.postValue(false)
+            _isLoading.value = false
         }
     }
 
-    fun cacheImageForCast(
-        sourceStreamProvider: () -> InputStream,
-        remotePath: String
-    ): String? {
+    fun cacheImageForCast(sourceStreamProvider: () -> InputStream, remotePath: String): String? {
         return try {
             val cachedFile = cacheManager.cacheFile(sourceStreamProvider, remotePath)
             if (cachedFile != null) {
@@ -100,7 +85,7 @@ class ImagePreviewViewModel(application: Application) : AndroidViewModel(applica
                 null
             }
         } catch (e: Exception) {
-            _error.postValue(e.message)
+            _error.value = e.message
             null
         }
     }

@@ -11,7 +11,6 @@ import com.vedeng.fileserver.proxy.ProxyServer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
-import java.io.FileInputStream
 import java.io.InputStream
 
 class VideoPlayerViewModel(application: Application) : AndroidViewModel(application) {
@@ -50,41 +49,27 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
         _videoPath.value = path
     }
 
-    fun cacheVideoForLocalPlayback(
-        sourceStreamProvider: () -> InputStream,
-        remotePath: String
-    ): String? {
-        _isLoading.postValue(true)
+    fun cacheVideoForLocalPlayback(sourceStreamProvider: () -> InputStream, remotePath: String): String? {
+        _isLoading.value = true
         return try {
             val cachedFile = cacheManager.cacheFile(sourceStreamProvider, remotePath)
             if (cachedFile != null) {
-                val sessionId = proxyServer.registerStream(
-                    ProxyServer.StreamRequest(
-                        sourceType = ProxyServer.SourceType.LOCAL,
-                        remotePath = remotePath,
-                        host = "127.0.0.1"
-                    ),
-                    FileInputStream(cachedFile)
-                )
-                currentSessionId = sessionId
-                val url = "http://127.0.0.1:${ProxyServer.getLocalPortValue()}/video/$sessionId"
-                _localUrl.postValue(url)
+                currentSessionId = "video_${System.currentTimeMillis()}"
+                val url = "http://127.0.0.1:${ProxyServer.getLocalPortValue()}/video/${cachedFile.name}"
+                _localUrl.value = url
                 url
             } else {
                 null
             }
         } catch (e: Exception) {
-            _error.postValue(e.message)
+            _error.value = e.message
             null
         } finally {
-            _isLoading.postValue(false)
+            _isLoading.value = false
         }
     }
 
-    fun cacheVideoForCast(
-        sourceStreamProvider: () -> InputStream,
-        remotePath: String
-    ): String? {
+    fun cacheVideoForCast(sourceStreamProvider: () -> InputStream, remotePath: String): String? {
         return try {
             val cachedFile = cacheManager.cacheFile(sourceStreamProvider, remotePath)
             if (cachedFile != null) {
@@ -93,7 +78,7 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 null
             }
         } catch (e: Exception) {
-            _error.postValue(e.message)
+            _error.value = e.message
             null
         }
     }
@@ -121,10 +106,10 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
                 if (device != null) {
                     castController.selectDevice(device)
                     castController.play(videoUrl, "video/mp4", title)
-                    _isCasting.postValue(true)
+                    _isCasting.value = true
                 }
             } catch (e: Exception) {
-                _error.postValue("Cast failed: ${e.message}")
+                _error.value = "Cast failed: ${e.message}"
             }
         }
     }
@@ -133,9 +118,9 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 castController.stop()
-                _isCasting.postValue(false)
+                _isCasting.value = false
             } catch (e: Exception) {
-                _error.postValue("Stop cast failed: ${e.message}")
+                _error.value = "Stop cast failed: ${e.message}"
             }
         }
     }
@@ -145,7 +130,7 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
             try {
                 castController.pause()
             } catch (e: Exception) {
-                _error.postValue("Pause cast failed: ${e.message}")
+                _error.value = "Pause cast failed: ${e.message}"
             }
         }
     }
@@ -155,7 +140,7 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
             try {
                 castController.resume()
             } catch (e: Exception) {
-                _error.postValue("Resume cast failed: ${e.message}")
+                _error.value = "Resume cast failed: ${e.message}"
             }
         }
     }
@@ -165,13 +150,13 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
             try {
                 castController.seek(position)
             } catch (e: Exception) {
-                _error.postValue("Seek failed: ${e.message}")
+                _error.value = "Seek failed: ${e.message}"
             }
         }
     }
 
     fun selectCastDevice(device: CastController.CastDevice) {
-        _castDevice.postValue(device)
+        _castDevice.value = device
     }
 
     fun searchCastDevices(callback: (List<CastController.CastDevice>) -> Unit) {
@@ -179,11 +164,11 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun setPlaybackPosition(position: Long) {
-        _playbackPosition.postValue(position)
+        _playbackPosition.value = position
     }
 
     fun setVideoDuration(duration: Long) {
-        _videoDuration.postValue(duration)
+        _videoDuration.value = duration
     }
 
     fun releaseStream() {

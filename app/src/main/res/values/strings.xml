@@ -34,4 +34,5 @@
     <string name="next">下一张</string>
     <string name="casting">正在投屏</string>
     <string name="not_casting">未投屏</string>
+    <string name="back">返回</string>
 </resources>

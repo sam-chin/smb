@@ -295,57 +295,72 @@ class CacheManager private constructor(private val context: Context) {
 
     fun cacheFile(url: String, sourceStream: InputStream, size: Long = -1): Result<File> = runBlocking {
         withContext(Dispatchers.IO) {
-            val key = getCacheKey(url)
+            cacheFileInternal(url, sourceStream, size)
+        }
+    }
 
-            readLock.lock()
-            try {
-                val existingFile = File(cacheDir, key)
-                if (existingFile.exists()) {
-                    incrementReference(key)
-                    updateAccessOrder(key)
-                    return@withContext Result.success(existingFile)
-                }
-            } finally {
-                readLock.unlock()
+    fun cacheFile(sourceStreamProvider: () -> InputStream, url: String): File? {
+        return try {
+            val sourceStream = sourceStreamProvider()
+            val result = cacheFile(url, sourceStream)
+            result.getOrNull()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error caching file: ${e.message}")
+            null
+        }
+    }
+
+    private suspend fun cacheFileInternal(url: String, sourceStream: InputStream, size: Long = -1): Result<File> {
+        val key = getCacheKey(url)
+
+        readLock.lock()
+        try {
+            val existingFile = File(cacheDir, key)
+            if (existingFile.exists()) {
+                incrementReference(key)
+                updateAccessOrder(key)
+                return@withContext Result.success(existingFile)
+            }
+        } finally {
+            readLock.unlock()
+        }
+
+        writeLock.lock()
+        try {
+            val cachedFile = File(cacheDir, key)
+            val parent = cachedFile.parentFile
+            if (parent != null && !parent.exists()) {
+                parent.mkdirs()
             }
 
-            writeLock.lock()
-            try {
-                val cachedFile = File(cacheDir, key)
-                val parent = cachedFile.parentFile
-                if (parent != null && !parent.exists()) {
-                    parent.mkdirs()
-                }
-
-                val handle = activeStreams[key]
-                val fos = if (handle != null) {
-                    handle.fileOutputStream
-                } else {
-                    FileOutputStream(cachedFile)
-                }
-
-                val buffer = ByteArray(8192)
-                var totalRead = 0L
-                var bytesRead: Int
-
-                while (sourceStream.read(buffer).also { bytesRead = it } != -1) {
-                    fos?.write(buffer, 0, bytesRead)
-                    totalRead += bytesRead
-                }
-
-                fos?.flush()
-                fos?.close()
-
-                fileAccessOrder.remove(key)
-                fileAccessOrder.add(key)
-
-                Result.success(cachedFile)
-            } catch (e: Exception) {
-                Log.e(TAG, "Error caching file: ${e.message}")
-                Result.failure(e)
-            } finally {
-                writeLock.unlock()
+            val handle = activeStreams[key]
+            val fos = if (handle != null) {
+                handle.fileOutputStream
+            } else {
+                FileOutputStream(cachedFile)
             }
+
+            val buffer = ByteArray(8192)
+            var totalRead = 0L
+            var bytesRead: Int
+
+            while (sourceStream.read(buffer).also { bytesRead = it } != -1) {
+                fos?.write(buffer, 0, bytesRead)
+                totalRead += bytesRead
+            }
+
+            fos?.flush()
+            fos?.close()
+
+            fileAccessOrder.remove(key)
+            fileAccessOrder.add(key)
+
+            Result.success(cachedFile)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error caching file: ${e.message}")
+            Result.failure(e)
+        } finally {
+            writeLock.unlock()
         }
     }
 

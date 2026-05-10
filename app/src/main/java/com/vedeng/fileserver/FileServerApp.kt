@@ -21,7 +21,7 @@ class FileServerApp : Application() {
         super.onCreate()
         instance = this
 
-        cacheManager = CacheManager(this)
+        cacheManager = CacheManager.getInstance(this)
         proxyServer = ProxyServer.getInstance(this, cacheManager)
         proxyServer.start()
     }

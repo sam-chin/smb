@@ -20,8 +20,6 @@ class ImagePreviewActivity : AppCompatActivity() {
     private val viewModel: ImagePreviewViewModel by viewModels()
 
     private var scaleFactor = 1.0f
-    private var translateX = 0f
-    private var translateY = 0f
 
     private lateinit var scaleGestureDetector: ScaleGestureDetector
     private lateinit var gestureDetector: GestureDetector
@@ -52,8 +50,8 @@ class ImagePreviewActivity : AppCompatActivity() {
             override fun onScale(detector: ScaleGestureDetector): Boolean {
                 scaleFactor *= detector.scaleFactor
                 scaleFactor = max(0.5f, min(scaleFactor, 5.0f))
-                binding.imageView.scaleX = scaleFactor
-                binding.imageView.scaleY = scaleFactor
+                binding.photoView.scaleX = scaleFactor
+                binding.photoView.scaleY = scaleFactor
                 return true
             }
         })
@@ -61,8 +59,8 @@ class ImagePreviewActivity : AppCompatActivity() {
         gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onDoubleTap(e: MotionEvent): Boolean {
                 scaleFactor = if (scaleFactor > 1.0f) 1.0f else 2.0f
-                binding.imageView.scaleX = scaleFactor
-                binding.imageView.scaleY = scaleFactor
+                binding.photoView.scaleX = scaleFactor
+                binding.photoView.scaleY = scaleFactor
                 return true
             }
 
@@ -88,7 +86,7 @@ class ImagePreviewActivity : AppCompatActivity() {
         }
 
         viewModel.isLoading.observe(this) { isLoading ->
-            binding.loadingView.visibility = if (isLoading) View.VISIBLE else View.GONE
+            binding.loadingProgress.visibility = if (isLoading) View.VISIBLE else View.GONE
         }
 
         viewModel.error.observe(this) { error ->
@@ -138,11 +136,11 @@ class ImagePreviewActivity : AppCompatActivity() {
     }
 
     private fun loadImage(path: String) {
-        binding.loadingView.visibility = View.VISIBLE
+        binding.loadingProgress.visibility = View.VISIBLE
         val cachedUrl = viewModel.getCachedImageUrl(path)
         if (cachedUrl != null) {
-            binding.imageView.setImageURI(android.net.Uri.parse(cachedUrl))
-            binding.loadingView.visibility = View.GONE
+            binding.photoView.setImageURI(android.net.Uri.parse(cachedUrl))
+            binding.loadingProgress.visibility = View.GONE
         } else {
             viewModel.cacheImageForLocalPreview(
                 sourceStreamProvider = {
@@ -154,21 +152,11 @@ class ImagePreviewActivity : AppCompatActivity() {
             )
             viewModel.localUrl.observe(this) { url ->
                 url?.let {
-                    binding.imageView.setImageURI(android.net.Uri.parse(it))
-                    binding.loadingView.visibility = View.GONE
+                    binding.photoView.setImageURI(android.net.Uri.parse(it))
+                    binding.loadingProgress.visibility = View.GONE
                 }
             }
         }
-    }
-
-    private fun resetTransform() {
-        scaleFactor = 1.0f
-        translateX = 0f
-        translateY = 0f
-        binding.imageView.scaleX = 1.0f
-        binding.imageView.scaleY = 1.0f
-        binding.imageView.translationX = 0f
-        binding.imageView.translationY = 0f
     }
 
     private fun updateIndexDisplay(index: Int) {

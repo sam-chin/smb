@@ -12,10 +12,12 @@
         android:layout_height="?attr/actionBarSize"
         android:background="#80000000"
         app:layout_constraintTop_toTopOf="parent"
+        app:navigationIcon="@android:drawable/ic_menu_close_clear_cancel"
+        app:title="Image Preview"
         app:titleTextColor="@color/white" />
 
     <ImageView
-        android:id="@+id/imageView"
+        android:id="@+id/photoView"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:scaleType="fitCenter"
@@ -25,7 +27,7 @@
         app:layout_constraintTop_toBottomOf="@id/toolbar" />
 
     <FrameLayout
-        android:id="@+id/loadingView"
+        android:id="@+id/loadingProgress"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="#80000000"
@@ -75,8 +77,16 @@
             android:id="@+id/btnSlideshow"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
+            android:layout_marginStart="8dp"
             android:text="@string/slideshow"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/btnCast"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="投屏"
             android:textSize="12sp" />
 
     </LinearLayout>

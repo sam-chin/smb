@@ -12,6 +12,8 @@
         android:layout_height="?attr/actionBarSize"
         android:background="#80000000"
         app:layout_constraintTop_toTopOf="parent"
+        app:navigationIcon="@android:drawable/ic_menu_close_clear_cancel"
+        app:title="Video Player"
         app:titleTextColor="@color/white" />
 
     <androidx.media3.ui.PlayerView
@@ -26,7 +28,7 @@
         app:use_controller="true" />
 
     <FrameLayout
-        android:id="@+id/progressBar"
+        android:id="@+id/loadingProgress"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="#80000000"
@@ -48,37 +50,15 @@
         android:padding="8dp"
         app:layout_constraintBottom_toBottomOf="parent">
 
-        <LinearLayout
-            android:layout_width="match_parent"
+        <TextView
+            android:id="@+id/castStatusText"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <TextView
-                android:id="@+id/tvCurrentTime"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@color/white"
-                android:textSize="12sp"
-                tools:text="00:00" />
-
-            <SeekBar
-                android:id="@+id/seekBar"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:progressTint="@color/primary"
-                android:thumbTint="@color/primary" />
-
-            <TextView
-                android:id="@+id/tvTotalTime"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@color/white"
-                android:textSize="12sp"
-                tools:text="00:00" />
-
-        </LinearLayout>
+            android:layout_gravity="center"
+            android:text="Casting..."
+            android:textColor="@color/accent"
+            android:textSize="12sp"
+            android:visibility="gone" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -87,36 +67,13 @@
             android:gravity="center"
             android:orientation="horizontal">
 
-            <ImageButton
-                android:id="@+id/btnPrevious"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/previous"
-                android:src="@android:drawable/ic_media_rew" />
-
-            <ImageButton
-                android:id="@+id/btnPlayPause"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
-                android:layout_marginHorizontal="16dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/play"
-                android:src="@android:drawable/ic_media_play" />
-
-            <ImageButton
-                android:id="@+id/btnNext"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/next"
-                android:src="@android:drawable/ic_media_ff" />
-
-            <View
-                android:layout_width="1dp"
-                android:layout_height="32dp"
-                android:layout_marginHorizontal="16dp"
-                android:background="@color/white" />
+            <Button
+                android:id="@+id/btnBack"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="16dp"
+                android:text="@string/back"
+                android:textSize="12sp" />
 
             <Button
                 android:id="@+id/btnCast"
@@ -126,29 +83,6 @@
                 android:textSize="12sp" />
 
         </LinearLayout>
-
-        <TextView
-            android:id="@+id/tvCastStatus"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:layout_marginTop="4dp"
-            android:textColor="@color/accent"
-            android:textSize="12sp"
-            android:visibility="gone"
-            tools:text="投屏到: 电视"
-            tools:visibility="visible" />
-
-        <TextView
-            android:id="@+id/tvCastPosition"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:textColor="@color/accent"
-            android:textSize="12sp"
-            android:visibility="gone"
-            tools:text="投屏进度: 00:00 / 00:00"
-            tools:visibility="visible" />
 
     </LinearLayout>
 
