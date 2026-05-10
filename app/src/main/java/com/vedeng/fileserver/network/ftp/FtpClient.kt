@@ -1,8 +1,7 @@
 package com.vedeng.fileserver.network.ftp
 
+import com.vedeng.fileserver.util.LogHelper
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.*
 import java.net.InetSocketAddress
@@ -11,6 +10,10 @@ import java.net.SocketException
 import java.util.concurrent.atomic.AtomicBoolean
 
 class FtpClient {
+
+    companion object {
+        private const val TAG = "FtpClient"
+    }
 
     private var host: String = ""
     private var port: Int = 21
@@ -22,7 +25,7 @@ class FtpClient {
     private var reader: BufferedReader? = null
     private var writer: PrintWriter? = null
     private var dataReader: BufferedReader? = null
-    private var dataWriter: PrintWriter? = null
+    private var dataInputStream: InputStream? = null
     private var isConnected = AtomicBoolean(false)
     private var isLoggedIn = AtomicBoolean(false)
     private var currentDir: String = "/"
@@ -91,6 +94,10 @@ class FtpClient {
             }
 
             isLoggedIn.set(true)
+
+            sendCommand("TYPE I")
+            readResponse()
+
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -103,32 +110,81 @@ class FtpClient {
                 return@withContext Result.failure(Exception("Not connected"))
             }
 
+            val targetPath = if (path.isEmpty() || path == "/") "/" else path
+            LogHelper.d(TAG, "Listing files at: $targetPath")
+
+            val cwdResult = changeDirectory(targetPath)
+            if (cwdResult.isFailure) {
+                LogHelper.e(TAG, "CWD failed for $targetPath, trying root")
+                val rootCwd = changeDirectory("/")
+                if (rootCwd.isFailure) {
+                    return@withContext Result.failure(cwdResult.exceptionOrNull() ?: Exception("Failed to change directory"))
+                }
+            }
+
+            LogHelper.d(TAG, "Entering passive mode")
             val listResult = enterPassiveMode()
             if (listResult.isFailure) {
                 return@withContext Result.failure(listResult.exceptionOrNull() ?: Exception("Passive mode failed"))
             }
 
-            val pathToList = if (path.isEmpty() || path == "/") currentDir else path
-            sendCommand("LIST $pathToList")
+            LogHelper.d(TAG, "Sending LIST command")
+            sendCommand("LIST")
 
             val listResponse = readResponse()
+            LogHelper.d(TAG, "LIST response: ${listResponse.code} ${listResponse.message}")
+            
             if (!isSuccessCode(listResponse.code) && listResponse.code != 150 && listResponse.code != 125) {
+                closeDataConnection()
                 return@withContext Result.failure(Exception("List failed: ${listResponse.message}"))
             }
 
             val files = mutableListOf<FileInfo>()
             var line: String?
+            var lineCount = 0
 
-            while (dataReader?.readLine().also { line = it } != null) {
-                line?.let { parseListLine(it, pathToList) }?.let { files.add(it) }
+            try {
+                while (dataReader?.readLine().also { line = it } != null) {
+                    line?.let { 
+                        lineCount++
+                        LogHelper.d(TAG, "FTP line $lineCount: $it")
+                        parseListLine(it, currentDir)?.let { fileInfo -> 
+                            files.add(fileInfo)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                LogHelper.e(TAG, "Error reading FTP list data", e)
             }
 
+            LogHelper.d(TAG, "Read $lineCount lines, parsed ${files.size} files")
             closeDataConnection()
 
-            val nlstResponse = readResponse()
-            currentDir = pathToList
+            try {
+                val finalResponse = readResponse()
+                LogHelper.d(TAG, "Final response after LIST: ${finalResponse.code}")
+            } catch (e: Exception) {
+                LogHelper.w(TAG, "Error reading final response", e)
+            }
 
-            Result.success(files)
+            val sortedFiles = files.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
+            Result.success(sortedFiles)
+        } catch (e: Exception) {
+            LogHelper.e(TAG, "List files failed", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun changeDirectory(path: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            sendCommand("CWD $path")
+            val response = readResponse()
+            if (isSuccessCode(response.code)) {
+                currentDir = path
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception("CWD failed: ${response.message}"))
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -149,7 +205,7 @@ class FtpClient {
                 return@withContext Result.failure(Exception("Download failed: ${response.message}"))
             }
 
-            val inputStream = dataSocket?.getInputStream()
+            val inputStream = dataInputStream
             if (inputStream == null) {
                 closeDataConnection()
                 return@withContext Result.failure(Exception("Failed to get input stream"))
@@ -195,6 +251,9 @@ class FtpClient {
             dataSocket = Socket()
             dataSocket?.connect(InetSocketAddress(passiveHost, passivePort), 10000)
 
+            dataReader = BufferedReader(InputStreamReader(dataSocket?.getInputStream()))
+            dataInputStream = dataSocket?.getInputStream()
+
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -204,11 +263,11 @@ class FtpClient {
     private fun closeDataConnection() {
         try {
             dataReader?.close()
-            dataWriter?.close()
+            dataInputStream?.close()
             dataSocket?.close()
             dataSocket = null
             dataReader = null
-            dataWriter = null
+            dataInputStream = null
         } catch (e: Exception) {
         }
     }
@@ -228,24 +287,52 @@ class FtpClient {
     private fun isSuccessCode(code: Int): Boolean = code in 200..299
 
     private fun parseListLine(line: String, basePath: String): FileInfo? {
-        if (line.length < 45) return null
+        if (line.isBlank()) return null
+        
+        val trimmedLine = line.trim()
+        
+        try {
+            val parts = trimmedLine.split(Regex("\\s+")).filter { it.isNotEmpty() }
+            
+            if (parts.size < 9) {
+                LogHelper.d(TAG, "Skipping short line: $trimmedLine")
+                return null
+            }
 
-        return try {
-            val isDir = line.startsWith('d')
-            val sizeStr = line.substring(30, 41).trim()
-            val size = sizeStr.toLongOrNull() ?: 0L
+            val isDir = trimmedLine.startsWith('d') || trimmedLine.startsWith('l')
+            
+            val size = try {
+                parts[4].toLongOrNull() ?: 0L
+            } catch (e: Exception) {
+                0L
+            }
 
-            val dateStr = line.substring(42, 56)
-            val lastModified = parseListDate(dateStr)
+            val nameStartIndex = trimmedLine.indexOf(parts[8])
+            val name = if (nameStartIndex >= 0) {
+                trimmedLine.substring(nameStartIndex).trim()
+            } else {
+                parts.drop(8).joinToString(" ")
+            }
 
-            val nameStart = line.indexOf(' ', 56) + 1
-            val name = line.substring(nameStart).trim()
+            if (name == "." || name == "..") {
+                return null
+            }
 
-            val path = if (basePath.endsWith('/')) "$basePath$name" else "$basePath/$name"
+            val path = if (basePath == "/") {
+                "/$name"
+            } else if (basePath.endsWith('/')) {
+                "$basePath$name"
+            } else {
+                "$basePath/$name"
+            }
 
-            FileInfo(name, path, isDir, size, lastModified)
+            val lastModified = System.currentTimeMillis()
+
+            LogHelper.d(TAG, "Parsed: name=$name, isDir=$isDir, path=$path")
+            return FileInfo(name, path, isDir, size, lastModified)
         } catch (e: Exception) {
-            null
+            LogHelper.e(TAG, "Error parsing line: $trimmedLine", e)
+            return null
         }
     }
 

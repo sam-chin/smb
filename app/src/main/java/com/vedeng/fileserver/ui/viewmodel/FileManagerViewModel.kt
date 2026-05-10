@@ -16,7 +16,7 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
 
     private var smbClient: SmbClient? = null
     private var ftpClient: FtpClient? = null
-    private var localRoot: String? = null
+    private var localRoot: String = ""
 
     private val _files = MutableLiveData<List<FileItem>>()
     val files: LiveData<List<FileItem>> = _files
@@ -48,6 +48,8 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
         val name: String,
         val type: ServerType,
         val host: String = "",
+        val share: String = "",
+        val domain: String? = null,
         val port: Int = 0,
         val username: String? = null,
         val password: String? = null
@@ -61,17 +63,19 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
         DISCONNECTED, CONNECTING, CONNECTED, ERROR
     }
 
-    fun connectToSmbServer(host: String, share: String, username: String?, password: String?) {
+    fun connectToSmbServer(host: String, share: String, domain: String?, username: String?, password: String?) {
         _connectionStatus.value = ConnectionStatus.CONNECTING
         viewModelScope.launch {
             try {
                 smbClient = SmbClient(getApplication())
-                val result = smbClient?.connect(host, share, username, password)
+                val result = smbClient?.connect(host, share, domain, username, password)
                 if (result?.isSuccess == true) {
                     _currentServer.value = ServerInfo(
                         name = "$host/$share",
                         type = ServerType.SMB,
                         host = host,
+                        share = share,
+                        domain = domain,
                         port = 445,
                         username = username,
                         password = password
@@ -118,12 +122,14 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun connectToLocalStorage() {
-        _connectionStatus.value = ConnectionStatus.CONNECTED
+        _connectionStatus.value = ConnectionStatus.CONNECTING
+        localRoot = "/storage/emulated/0"
         _currentServer.value = ServerInfo(
             name = "Local Storage",
             type = ServerType.LOCAL
         )
-        listLocalFiles("/")
+        _connectionStatus.value = ConnectionStatus.CONNECTED
+        listFiles("/")
     }
 
     fun listFiles(path: String) {
@@ -142,13 +148,7 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
 
     private suspend fun listSmbFiles(path: String) = withContext(Dispatchers.IO) {
         try {
-            val serverInfo = _currentServer.value
-            if (serverInfo == null) {
-                _isLoading.value = false
-                return@withContext
-            }
-            val smbPath = SmbClient.buildPath(serverInfo.host, "", path.removePrefix("/"))
-            val result = smbClient?.listFiles(smbPath)
+            val result = smbClient?.listFiles(path)
             result?.onSuccess { smbFiles ->
                 val fileList = smbFiles.map { file ->
                     FileItem(
@@ -193,19 +193,27 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
     private fun listLocalFiles(path: String) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val root = File("/storage/emulated/0")
-                val targetDir = if (path == "/") root else File(root, path.removePrefix("/"))
+                val root = File(localRoot)
+                val targetDir = if (path == "/" || path.isEmpty()) root else File(root, path.removePrefix("/"))
+
                 if (targetDir.exists() && targetDir.isDirectory) {
                     val fileList = targetDir.listFiles()?.map { file ->
+                        val relativePath = if (path == "/") {
+                            "/${file.name}"
+                        } else {
+                            "$path/${file.name}"
+                        }
+
                         FileItem(
                             name = file.name,
-                            path = "/${file.name}",
+                            path = relativePath,
                             isDirectory = file.isDirectory,
                             size = if (file.isDirectory) 0L else file.length(),
                             lastModified = file.lastModified()
                         )
-                    } ?: emptyList()
-                    _files.postValue(fileList.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() })))
+                    }?.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() })) ?: emptyList()
+
+                    _files.postValue(fileList)
                 } else {
                     _files.postValue(emptyList())
                 }
@@ -219,9 +227,40 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun navigateUp(): Boolean {
         val path = _currentPath.value ?: return false
-        if (path == "/") return false
+        if (path == "/" || path.isEmpty()) return false
 
-        val parentPath = File(path).parent ?: "/"
+        val parentPath = when (_currentServer.value?.type) {
+            ServerType.SMB -> {
+                val basePath = "smb://${_currentServer.value?.host}/${_currentServer.value?.share}/"
+                if (path == basePath) return false
+                
+                val lastSlash = path.lastIndexOf('/')
+                if (lastSlash <= basePath.length - 1) {
+                    basePath
+                } else {
+                    path.substring(0, lastSlash)
+                }
+            }
+            ServerType.FTP -> {
+                if (path == "/") return false
+                val lastSlash = path.lastIndexOf('/')
+                if (lastSlash == 0) {
+                    "/"
+                } else {
+                    path.substring(0, lastSlash)
+                }
+            }
+            ServerType.LOCAL -> {
+                val lastSlash = path.lastIndexOf('/')
+                if (lastSlash == 0) {
+                    "/"
+                } else {
+                    path.substring(0, lastSlash)
+                }
+            }
+            null -> return false
+        }
+
         listFiles(parentPath)
         return true
     }
@@ -235,7 +274,6 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
         ftpClient?.disconnect()
         smbClient = null
         ftpClient = null
-        localRoot = null
         _currentServer.postValue(null)
         _connectionStatus.postValue(ConnectionStatus.DISCONNECTED)
         _files.postValue(emptyList())
@@ -262,16 +300,39 @@ class FileManagerViewModel(application: Application) : AndroidViewModel(applicat
                     } ?: callback(null)
                 }
                 ServerType.LOCAL -> {
-                    val root = File("/storage/emulated/0")
-                    val file = File(root, path.removePrefix("/"))
-                    if (file.exists()) {
-                        callback(file.inputStream())
-                    } else {
+                    try {
+                        val root = File(localRoot)
+                        val file = if (path.startsWith("/")) {
+                            File(root, path.removePrefix("/"))
+                        } else {
+                            File(root, path)
+                        }
+                        if (file.exists()) {
+                            callback(file.inputStream())
+                        } else {
+                            callback(null)
+                        }
+                    } catch (e: Exception) {
                         callback(null)
                     }
                 }
                 null -> callback(null)
             }
+        }
+    }
+
+    fun getLocalPathForFile(path: String): String? {
+        return when (_currentServer.value?.type) {
+            ServerType.LOCAL -> {
+                val root = File(localRoot)
+                val file = if (path.startsWith("/")) {
+                    File(root, path.removePrefix("/"))
+                } else {
+                    File(root, path)
+                }
+                if (file.exists()) file.absolutePath else null
+            }
+            else -> null
         }
     }
 }

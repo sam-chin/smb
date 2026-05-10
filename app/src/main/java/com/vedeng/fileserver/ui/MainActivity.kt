@@ -166,11 +166,13 @@ class MainActivity : AppCompatActivity() {
 
         val hostInput = EditText(this).apply { hint = "Host (e.g., 192.168.1.100)" }
         val shareInput = EditText(this).apply { hint = "Share Name" }
+        val domainInput = EditText(this).apply { hint = "Domain/Workgroup (optional)" }
         val usernameInput = EditText(this).apply { hint = "Username (optional)" }
         val passwordInput = EditText(this).apply { hint = "Password (optional)"; inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD }
 
         layout.addView(hostInput)
         layout.addView(shareInput)
+        layout.addView(domainInput)
         layout.addView(usernameInput)
         layout.addView(passwordInput)
 
@@ -180,11 +182,12 @@ class MainActivity : AppCompatActivity() {
             .setPositiveButton("Connect") { _, _ ->
                 val host = hostInput.text.toString().trim()
                 val share = shareInput.text.toString().trim()
+                val domain = domainInput.text.toString().trim().takeIf { it.isNotEmpty() }
                 val username = usernameInput.text.toString().trim().takeIf { it.isNotEmpty() }
                 val password = passwordInput.text.toString()
 
                 if (host.isNotEmpty() && share.isNotEmpty()) {
-                    viewModel.connectToSmbServer(host, share, username, password)
+                    viewModel.connectToSmbServer(host, share, domain, username, password)
                 } else {
                     Toast.makeText(this, "Host and Share are required", Toast.LENGTH_SHORT).show()
                 }
@@ -304,6 +307,10 @@ class MainActivity : AppCompatActivity() {
             }
             R.id.action_refresh -> {
                 viewModel.listFiles(viewModel.currentPath.value ?: "/")
+                true
+            }
+            R.id.action_view_logs -> {
+                startActivity(Intent(this, LogViewerActivity::class.java))
                 true
             }
             else -> super.onOptionsItemSelected(item)

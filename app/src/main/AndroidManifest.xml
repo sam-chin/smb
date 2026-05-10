@@ -47,6 +47,10 @@
             android:name=".ui.cast.CastDeviceActivity"
             android:theme="@style/AppTheme" />
 
+        <activity
+            android:name=".ui.LogViewerActivity"
+            android:theme="@style/AppTheme" />
+
     </application>
 
 </manifest>

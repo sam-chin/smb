@@ -9,6 +9,11 @@
         app:showAsAction="ifRoom" />
 
     <item
+        android:id="@+id/action_view_logs"
+        android:title="View Logs"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/action_disconnect"
         android:title="@string/disconnect"
         app:showAsAction="never" />
