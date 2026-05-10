@@ -73,7 +73,7 @@ class VideoPlayerActivity : AppCompatActivity() {
     }
 
     private fun prepareVideo(path: String) {
-        viewModel.isLoading.value = true
+        setLoadingState(true)
 
         val cachedUrl = viewModel.getCachedVideoUrl(path)
         if (cachedUrl != null) {
@@ -97,6 +97,14 @@ class VideoPlayerActivity : AppCompatActivity() {
         }
     }
 
+    private fun setLoadingState(isLoading: Boolean) {
+        if (isLoading) {
+            binding.loadingProgress.visibility = View.VISIBLE
+        } else {
+            binding.loadingProgress.visibility = View.GONE
+        }
+    }
+
     private fun initializePlayer(videoUrl: String) {
         player = ExoPlayer.Builder(this).build().also { exoPlayer ->
             binding.playerView.player = exoPlayer
@@ -110,7 +118,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                 override fun onPlaybackStateChanged(state: Int) {
                     when (state) {
                         androidx.media3.common.Player.STATE_READY -> {
-                            viewModel.isLoading.value = false
+                            setLoadingState(false)
                             viewModel.setVideoDuration(exoPlayer.duration)
                         }
                         androidx.media3.common.Player.STATE_ENDED -> {
@@ -120,7 +128,7 @@ class VideoPlayerActivity : AppCompatActivity() {
                 }
             })
         }
-        viewModel.isLoading.value = false
+        setLoadingState(false)
     }
 
     override fun onStart() {

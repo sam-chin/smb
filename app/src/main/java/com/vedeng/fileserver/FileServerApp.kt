@@ -29,6 +29,5 @@ class FileServerApp : Application() {
     override fun onTerminate() {
         super.onTerminate()
         proxyServer.stop()
-        cacheManager.destroy()
     }
 }

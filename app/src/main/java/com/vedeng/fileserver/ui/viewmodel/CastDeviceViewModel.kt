@@ -130,6 +130,10 @@ class CastDeviceViewModel(application: Application) : AndroidViewModel(applicati
         _isCasting.postValue(false)
     }
 
+    fun clearError() {
+        _error.value = null
+    }
+
     override fun onCleared() {
         super.onCleared()
         disconnect()

@@ -7,6 +7,7 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.vedeng.fileserver.databinding.ActivityCastDeviceBinding
+import com.vedeng.fileserver.ui.adapter.CastDeviceAdapter
 import com.vedeng.fileserver.ui.viewmodel.CastDeviceViewModel
 
 class CastDeviceActivity : AppCompatActivity() {
@@ -75,7 +76,7 @@ class CastDeviceActivity : AppCompatActivity() {
         }
 
         binding.btnPause.setOnClickListener {
-            viewModel.pauseCast()
+            viewModel.pauseCasting()
         }
 
         binding.btnStop.setOnClickListener {
