@@ -1,12 +1,17 @@
-# Project-wide Gradle settings
-org.gradle.jvmargs=-Xmx4096m -Dfile.encoding=UTF-8
-org.gradle.parallel=true
-org.gradle.caching=true
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
 
-# AndroidX
-android.useAndroidX=true
-android.enableJetifier=true
-
-# Kotlin
-kotlin.code.style=official
-android.nonTransitiveRClass=true
+rootProject.name = "FileServer"
+include(":app")
